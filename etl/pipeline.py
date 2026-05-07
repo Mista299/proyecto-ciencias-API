@@ -59,20 +59,20 @@ def procesar_archivo(path: str, db: Session) -> dict:
     insertados = actualizados = omitidos = 0
     errores: list[str] = []
 
-    # Column detection
+    # Column detection — supports MUA internal names (e.g. Genero_TA, dia_colecta_IC)
     c_genero       = _find_col(cols, "genero", "género", "genus")
-    c_epiteto      = _find_col(cols, "epiteto", "especie", "specificepithet")
+    c_epiteto      = _find_col(cols, "epiteto", "specificepithet")
     c_determinacion = _find_col(cols, "determinacion", "determinación", "scientificname", "nombre cientifico")
     c_familia      = _find_col(cols, "familia", "family")
+    c_subfamilia   = _find_col(cols, "subfamilia", "subfamily")
     c_orden        = _find_col(cols, "orden", "order")
     c_clase        = _find_col(cols, "clase", "class")
-    c_filo         = _find_col(cols, "phylum", "filo")
+    c_filo         = _find_col(cols, "phyllum", "phylum", "filo")
     c_reino        = _find_col(cols, "reino", "kingdom")
-    c_subfamilia   = _find_col(cols, "subfamilia", "subfamily")
     c_rank         = _find_col(cols, "rango", "rank", "taxonrank")
-    c_dia          = _find_col(cols, "dia", "day")
-    c_mes          = _find_col(cols, "mes", "month")
-    c_ano          = _find_col(cols, "ano", "año", "year")
+    c_dia          = _find_col(cols, "dia_colecta", "dia_col", "day")
+    c_mes          = _find_col(cols, "mes_colecta", "mes_col", "month")
+    c_ano          = _find_col(cols, "ano_colecta", "ano_col", "year")
     c_habitat      = _find_col(cols, "habitat", "hábitat")
     c_pais         = _find_col(cols, "pais", "país", "country")
     c_depto        = _find_col(cols, "departamento", "dpto", "state")
@@ -80,13 +80,13 @@ def procesar_archivo(path: str, db: Session) -> dict:
     c_localidad    = _find_col(cols, "localidad", "locality")
     c_lat          = _find_col(cols, "latitud", "latitude", "decimallat")
     c_lon          = _find_col(cols, "longitud", "longitude", "decimallon")
-    c_elev         = _find_col(cols, "altitud", "elevacion", "elevation")
-    c_catalog      = _find_col(cols, "numero", "catalogo", "catalog", "id")
+    c_elev         = _find_col(cols, "elev_minima", "altitud", "elevacion", "elevation")
+    c_catalog      = _find_col(cols, "numero_catalogo", "numero_cat", "catalogo", "catalog")
     c_sexo         = _find_col(cols, "sexo", "sex")
-    c_disp         = _find_col(cols, "disposicion", "disposición", "disposition")
+    c_disp         = _find_col(cols, "estado", "disposicion", "disposición", "disposition")
     c_prep         = _find_col(cols, "preparacion", "preparación", "preparation")
-    c_ind_count    = _find_col(cols, "individuos", "individualcount")
-    c_recorded_by  = _find_col(cols, "colector", "collector", "recordedby")
+    c_ind_count    = _find_col(cols, "individuos", "numero_ind", "individualcount")
+    c_recorded_by  = _find_col(cols, "nombre_colector", "colector", "collector", "recordedby")
 
     for idx, row in df.iterrows():
         try:
