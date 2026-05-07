@@ -267,6 +267,7 @@ def delete_occurrence(occurrence_id: str, db: Session = Depends(get_db)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(404, "Ocurrencia no encontrada")
+    db.query(Identification).filter(Identification.occurrence_id == occurrence_id).delete()
     db.delete(occ)
     db.commit()
 

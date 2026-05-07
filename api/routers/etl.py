@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+from typing import List
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
@@ -46,6 +47,45 @@ async def cargar_archivo_endpoint(
             os.unlink(named_path)
         except Exception:
             pass
+
+
+@router.post("/cargar-multiples")
+async def cargar_multiples(
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    resultados = []
+    for upload in files:
+        suffix = os.path.splitext(upload.filename or "")[1].lower()
+        if suffix not in (".xlsx", ".xls", ".csv"):
+            resultados.append({
+                "archivo": upload.filename, "total_filas": 0,
+                "insertados": 0, "actualizados": 0, "omitidos": 0,
+                "errores": [f"Formato no soportado: {suffix}"],
+                "mapeo": {"total_columnas": 0, "mapeadas": 0, "sin_mapear": []},
+            })
+            continue
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            shutil.copyfileobj(upload.file, tmp)
+            tmp_path = tmp.name
+        named_path = tmp_path + "_" + (upload.filename or "upload" + suffix)
+        try:
+            os.rename(tmp_path, named_path)
+            resultado = procesar_archivo(named_path, db)
+            resultados.append(resultado)
+        except Exception as e:
+            resultados.append({
+                "archivo": upload.filename, "total_filas": 0,
+                "insertados": 0, "actualizados": 0, "omitidos": 0,
+                "errores": [str(e)],
+                "mapeo": {"total_columnas": 0, "mapeadas": 0, "sin_mapear": []},
+            })
+        finally:
+            try:
+                os.unlink(named_path)
+            except Exception:
+                pass
+    return resultados
 
 
 @router.post("/previsualizar-mapeo")
