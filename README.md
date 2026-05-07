@@ -113,7 +113,6 @@ backend/
 ## 4. Configuración
 
 El archivo `backend/.env` contiene toda la configuración:
-
 ```env
 DATABASE_URL=postgresql://postgres@localhost:5432/mua_biodiversidad
 OLLAMA_URL=http://localhost:11434
