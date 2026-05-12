@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 import uuid
+import csv
+import io
 from database import get_db
 from models.occurrence import Occurrence
 from models.taxon import Taxon
@@ -56,6 +59,14 @@ class NewOccurrence(BaseModel):
     catalogNumber: str
     collectionCode: str
     basisOfRecord: str = "PreservedSpecimen"
+
+    @field_validator("catalogNumber", "collectionCode")
+    @classmethod
+    def no_colon(cls, v: str) -> str:
+        if ':' in v:
+            raise ValueError("No puede contener el carácter ':'")
+        return v
+
     occurrenceStatus: str = "PRESENT"
     disposition: Optional[str] = None
     sex: Optional[str] = None
@@ -250,6 +261,76 @@ def list_occurrences(
 
     rows = q.offset(skip).limit(limit).all()
     return [_serialize(o, t, e, l, i) for o, t, e, l, i in rows]
+
+
+@router.get("/export")
+def export_occurrences(
+    collection_code: str | None = Query(None),
+    taxon:           str | None = Query(None),
+    family:          str | None = Query(None),
+    state_province:  str | None = Query(None),
+    disposition:     str | None = Query(None),
+    identified_by:   str | None = Query(None),
+    verification_status: str | None = Query(None),
+    con_coordenadas: bool | None = Query(None),
+    year_from:       int | None = Query(None),
+    year_to:         int | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = _base_query(db)
+    if collection_code: q = q.filter(Occurrence.collection_code == collection_code)
+    if taxon:           q = q.filter(Taxon.scientific_name.ilike(f"%{taxon}%"))
+    if family:          q = q.filter(Taxon.family.ilike(f"%{family}%"))
+    if state_province:  q = q.filter(Location.state_province.ilike(f"%{state_province}%"))
+    if disposition:     q = q.filter(Occurrence.disposition == disposition)
+    if identified_by:   q = q.filter(Identification.identified_by.ilike(f"%{identified_by}%"))
+    if verification_status: q = q.filter(Identification.verification_status == verification_status)
+    if con_coordenadas is True:
+        q = q.filter(Location.decimal_latitude.isnot(None), Location.decimal_longitude.isnot(None))
+    if year_from: q = q.filter(Event.year >= year_from)
+    if year_to:   q = q.filter(Event.year <= year_to)
+
+    rows = q.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "occurrenceID", "catalogNumber", "collectionCode", "basisOfRecord",
+        "occurrenceStatus", "disposition", "sex", "recordedBy",
+        "scientificName", "taxonRank", "family", "genus",
+        "eventDate", "habitat",
+        "country", "stateProvince", "county", "locality",
+        "decimalLatitude", "decimalLongitude",
+        "identifiedBy", "dateIdentified", "verificationStatus",
+    ])
+    for occ, taxon_obj, event, location, ident in rows:
+        writer.writerow([
+            occ.occurrence_id, occ.catalog_number, occ.collection_code, occ.basis_of_record,
+            occ.occurrence_status, occ.disposition, occ.sex, occ.recorded_by,
+            taxon_obj.scientific_name if taxon_obj else "",
+            taxon_obj.taxon_rank if taxon_obj else "",
+            taxon_obj.family if taxon_obj else "",
+            taxon_obj.genus if taxon_obj else "",
+            event.event_date if event else "",
+            event.habitat if event else "",
+            location.country if location else "",
+            location.state_province if location else "",
+            location.county if location else "",
+            location.locality if location else "",
+            location.decimal_latitude if location else "",
+            location.decimal_longitude if location else "",
+            ident.identified_by if ident else "",
+            ident.date_identified if ident else "",
+            ident.verification_status if ident else "",
+        ])
+
+    csv_bytes = output.getvalue().encode("utf-8-sig")  # BOM for Excel compatibility
+    return StreamingResponse(
+        io.BytesIO(csv_bytes),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=\"especimenes.csv\""},
+    )
 
 
 @router.get("/{occurrence_id}")
