@@ -9,6 +9,8 @@ from models.taxon import Taxon
 from models.event import Event
 from models.location import Location
 from models.identification import Identification
+from auth.dependencies import get_current_user, require_admin
+from models.user import User
 
 
 class OccurrenceUpdate(BaseModel):
@@ -131,7 +133,7 @@ def _base_query(db: Session):
 
 
 @router.post("/", status_code=201)
-def create_occurrence(body: NewOccurrence, db: Session = Depends(get_db)):
+def create_occurrence(body: NewOccurrence, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occurrence_id = f"UDEA:{body.collectionCode}:{body.catalogNumber}"
     if db.get(Occurrence, occurrence_id):
         raise HTTPException(409, f"Ya existe un registro con catalogNumber '{body.catalogNumber}' en '{body.collectionCode}'")
@@ -218,6 +220,7 @@ def list_occurrences(
     skip:  int = Query(0, ge=0),
     limit: int = Query(50, le=500),
     db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
     q = _base_query(db)
 
@@ -250,7 +253,7 @@ def list_occurrences(
 
 
 @router.get("/{occurrence_id}")
-def get_occurrence(occurrence_id: str, db: Session = Depends(get_db)):
+def get_occurrence(occurrence_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     row = (
         _base_query(db)
         .filter(Occurrence.occurrence_id == occurrence_id)
@@ -263,7 +266,7 @@ def get_occurrence(occurrence_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{occurrence_id}", status_code=204)
-def delete_occurrence(occurrence_id: str, db: Session = Depends(get_db)):
+def delete_occurrence(occurrence_id: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(404, "Ocurrencia no encontrada")
@@ -280,7 +283,7 @@ def _get_full(occurrence_id: str, db: Session):
 
 
 @router.patch("/{occurrence_id}")
-def update_occurrence(occurrence_id: str, body: OccurrenceUpdate, db: Session = Depends(get_db)):
+def update_occurrence(occurrence_id: str, body: OccurrenceUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(404, "Ocurrencia no encontrada")
@@ -296,7 +299,7 @@ def update_occurrence(occurrence_id: str, body: OccurrenceUpdate, db: Session = 
 
 
 @router.patch("/{occurrence_id}/taxon")
-def update_taxon(occurrence_id: str, body: TaxonUpdate, db: Session = Depends(get_db)):
+def update_taxon(occurrence_id: str, body: TaxonUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ or not occ.taxon_id:
         raise HTTPException(404, "Taxón no encontrado para esta ocurrencia")
@@ -314,7 +317,7 @@ def update_taxon(occurrence_id: str, body: TaxonUpdate, db: Session = Depends(ge
 
 
 @router.patch("/{occurrence_id}/event")
-def update_event(occurrence_id: str, body: EventUpdate, db: Session = Depends(get_db)):
+def update_event(occurrence_id: str, body: EventUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ or not occ.event_id:
         raise HTTPException(404, "Evento no encontrado para esta ocurrencia")
@@ -337,7 +340,7 @@ def update_event(occurrence_id: str, body: EventUpdate, db: Session = Depends(ge
 
 
 @router.patch("/{occurrence_id}/location")
-def update_location(occurrence_id: str, body: LocationUpdate, db: Session = Depends(get_db)):
+def update_location(occurrence_id: str, body: LocationUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ or not occ.location_id:
         raise HTTPException(404, "Ubicación no encontrada para esta ocurrencia")
@@ -357,7 +360,7 @@ def update_location(occurrence_id: str, body: LocationUpdate, db: Session = Depe
 
 
 @router.patch("/{occurrence_id}/identification")
-def update_identification(occurrence_id: str, body: IdentificationUpdate, db: Session = Depends(get_db)):
+def update_identification(occurrence_id: str, body: IdentificationUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     occ = db.get(Occurrence, occurrence_id)
     if not occ:
         raise HTTPException(404, "Ocurrencia no encontrada")

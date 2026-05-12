@@ -8,12 +8,14 @@ from database import get_db
 from etl.pipeline import procesar_archivo, ejecutar_pipeline
 from etl.mapper import generar_reporte_mapeo
 from etl.loader import cargar_archivo
+from auth.dependencies import require_admin
+from models.user import User
 
 router = APIRouter(prefix="/etl", tags=["etl"])
 
 
 @router.post("/cargar-directorio")
-def cargar_directorio(db: Session = Depends(get_db)):
+def cargar_directorio(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     try:
         resultados = ejecutar_pipeline(db)
         return resultados
@@ -27,6 +29,7 @@ def cargar_directorio(db: Session = Depends(get_db)):
 async def cargar_archivo_endpoint(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
     suffix = os.path.splitext(file.filename or "")[1].lower()
     if suffix not in (".xlsx", ".xls", ".csv"):
@@ -53,6 +56,7 @@ async def cargar_archivo_endpoint(
 async def cargar_multiples(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
 ):
     resultados = []
     for upload in files:
@@ -89,7 +93,7 @@ async def cargar_multiples(
 
 
 @router.post("/previsualizar-mapeo")
-async def previsualizar_mapeo(file: UploadFile = File(...)):
+async def previsualizar_mapeo(file: UploadFile = File(...), _: User = Depends(require_admin)):
     suffix = os.path.splitext(file.filename or "")[1].lower()
     if suffix not in (".xlsx", ".xls", ".csv"):
         raise HTTPException(400, "Formato no soportado. Use .xlsx o .csv")

@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
 from models.taxon import Taxon
+from auth.dependencies import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/taxa", tags=["taxa"])
 
 
 @router.get("/")
-def list_taxa(db: Session = Depends(get_db)):
+def list_taxa(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return [
         {
             "taxon_id":       t.taxon_id,
@@ -22,7 +24,7 @@ def list_taxa(db: Session = Depends(get_db)):
 
 
 @router.get("/resumen")
-def resumen_taxa(db: Session = Depends(get_db)):
+def resumen_taxa(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     total = db.query(func.count(Taxon.taxon_id)).scalar()
 
     por_familia = (

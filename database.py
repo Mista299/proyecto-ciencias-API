@@ -16,5 +16,5 @@ def get_db():
         db.close()
 
 def init_db():
-    from models import taxon, event, location, occurrence, identification  # noqa: F401
+    from models import taxon, event, location, occurrence, identification, user  # noqa: F401
     Base.metadata.create_all(bind=engine)

@@ -10,3 +10,5 @@ requests
 pydantic
 alembic
 python-multipart
+python-jose[cryptography]
+bcrypt

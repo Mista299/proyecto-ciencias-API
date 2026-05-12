@@ -6,12 +6,14 @@ from models.occurrence import Occurrence
 from models.taxon import Taxon
 from models.event import Event
 from models.location import Location
+from auth.dependencies import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 @router.get("/calidad")
-def calidad(db: Session = Depends(get_db)):
+def calidad(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     total = db.query(func.count(Occurrence.occurrence_id)).scalar() or 0
 
     def pct(n: int) -> float:
@@ -70,7 +72,7 @@ def calidad(db: Session = Depends(get_db)):
 
 
 @router.get("/distribucion-geografica")
-def distribucion(db: Session = Depends(get_db)):
+def distribucion(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rows = (
         db.query(Location.country, func.count(Occurrence.occurrence_id).label("count"))
         .join(Occurrence, Location.location_id == Occurrence.location_id)
