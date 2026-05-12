@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # test_auth.sh — Pruebas del sistema de autenticación JWT
+# Requiere el servidor corriendo con TEST_MODE=true
 # Uso: bash tests/test_auth.sh [BASE_URL]
-# Ejemplo: bash tests/test_auth.sh http://localhost:8000
+# Ejemplo: TEST_MODE=true python main.py  &&  bash tests/test_auth.sh
 
 set -euo pipefail
 
@@ -11,7 +12,10 @@ FAIL=0
 ADMIN_TOKEN=""
 USER_TOKEN=""
 TEST_USER="testuser_ci_$$"
-TEST_PASS="testpass_ci_123"
+TEST_EMAIL="testuser_ci_$$@test.local"
+TEST_UID=""
+VERIFY_TOKEN=""
+TEMP_PASSWORD=""
 
 # ── Colores ────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
@@ -139,48 +143,58 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" \
 # ── BLOQUE 4: Gestión de usuarios (admin) ─────────────────────────────────────
 section "4. Gestión de usuarios"
 
-# 4.1 Crear usuario normal
+# 4.1 Crear usuario normal (requiere email, genera contraseña automáticamente)
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE/auth/users" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\",\"role\":\"user\"}")
+  -d "{\"username\":\"$TEST_USER\",\"email\":\"$TEST_EMAIL\",\"role\":\"user\"}")
 CODE=$(echo "$RESP" | tail -1)
 BODY=$(echo "$RESP" | head -n -1)
 if [ "$CODE" = "201" ]; then
   TEST_UID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
-  pass "Crear usuario normal → 201, id=$TEST_UID"
+  VERIFY_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('verify_token',''))" 2>/dev/null)
+  TEMP_PASSWORD=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('temp_password',''))" 2>/dev/null)
+  pass "Crear usuario normal → 201, id=$TEST_UID (TEST_MODE: tokens recibidos)"
 else
   fail "Crear usuario normal" "201" "$CODE — $BODY"
 fi
 
-# 4.2 Crear usuario con username duplicado (contraseña válida para que llegue al check de duplicado)
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/auth/users" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"$TEST_USER\",\"password\":\"password_valida_123\",\"role\":\"user\"}")
-[ "$CODE" = "409" ] \
-  && pass "Crear usuario duplicado → 409 Conflict" \
-  || fail "Crear usuario duplicado" "409" "$CODE"
+# 4.1b Verificar correo para activar la cuenta
+if [ -n "${VERIFY_TOKEN:-}" ]; then
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/auth/verify-email?token=$VERIFY_TOKEN")
+  [ "$CODE" = "200" ] \
+    && pass "Verificar correo del usuario de prueba → 200" \
+    || fail "Verificar correo" "200" "$CODE"
+fi
 
-# 4.3 Contraseña demasiado corta → 422
+# 4.2 Username duplicado → 409
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/auth/users" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"usuarionuevo","password":"abc","role":"user"}')
+  -d "{\"username\":\"$TEST_USER\",\"email\":\"otro_$$@test.local\",\"role\":\"user\"}")
+[ "$CODE" = "409" ] \
+  && pass "Username duplicado → 409 Conflict" \
+  || fail "Username duplicado" "409" "$CODE"
+
+# 4.3 Email inválido → 422
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/auth/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"usuarionuevo","email":"no-es-email","role":"user"}')
 [ "$CODE" = "422" ] \
-  && pass "Contraseña < 8 chars → 422 Unprocessable Entity" \
-  || fail "Contraseña corta" "422" "$CODE"
+  && pass "Email inválido → 422 Unprocessable Entity" \
+  || fail "Email inválido" "422" "$CODE"
 
 # 4.4 Username inválido (contiene espacio) → 422
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/auth/users" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"usuario invalido","password":"password123","role":"user"}')
+  -d '{"username":"usuario invalido","email":"ok@ok.com","role":"user"}')
 [ "$CODE" = "422" ] \
   && pass "Username con espacio → 422 Unprocessable Entity" \
   || fail "Username inválido" "422" "$CODE"
 
-# 4.5 Listar usuarios incluye el nuevo
+# 4.5 Listar usuarios incluye el nuevo (con campo email)
 RESP=$(curl -s \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   "$BASE/auth/users")
@@ -189,12 +203,17 @@ COUNT=$(echo "$RESP" | python3 -c "import sys,json; data=json.load(sys.stdin); p
   && pass "Listar usuarios contiene al usuario recién creado" \
   || fail "Listar usuarios" "1 coincidencia" "$COUNT"
 
+HAS_EMAIL=$(echo "$RESP" | python3 -c "import sys,json; data=json.load(sys.stdin); found=[u for u in data if u.get('username')=='$TEST_USER']; print('yes' if found and found[0].get('email') else 'no')" 2>/dev/null)
+[ "$HAS_EMAIL" = "yes" ] \
+  && pass "Listar usuarios incluye campo email" \
+  || fail "Campo email en listado" "yes" "$HAS_EMAIL"
+
 # ── BLOQUE 5: RBAC — acceso con token de usuario normal ───────────────────────
 section "5. Control de acceso por rol (RBAC)"
 
-# 5.1 Login como usuario normal
+# 5.1 Login como usuario normal (con contraseña temporal generada, TEST_MODE)
 RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE/auth/login" \
-  -d "username=$TEST_USER&password=$TEST_PASS" \
+  -d "username=$TEST_USER&password=$TEMP_PASSWORD" \
   -H "Content-Type: application/x-www-form-urlencoded")
 CODE=$(echo "$RESP" | tail -1)
 BODY=$(echo "$RESP" | head -n -1)
@@ -265,7 +284,7 @@ if [ -n "${TEST_UID:-}" ]; then
 
   # Verificar que ya no puede hacer login
   CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/auth/login" \
-    -d "username=$TEST_USER&password=$TEST_PASS" \
+    -d "username=$TEST_USER&password=$TEMP_PASSWORD" \
     -H "Content-Type: application/x-www-form-urlencoded")
   [ "$CODE" = "401" ] \
     && pass "Usuario eliminado ya no puede hacer login → 401" \
