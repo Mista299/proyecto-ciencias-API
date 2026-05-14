@@ -9,6 +9,9 @@ app = FastAPI(
     title="MUA Biodiversidad API",
     description="API para gestión de colecciones biológicas del Museo Universidad de Antioquia",
     version="1.0.0",
+    docs_url="/docs" if config.DEBUG else None,
+    redoc_url="/redoc" if config.DEBUG else None,
+    openapi_url="/openapi.json" if config.DEBUG else None,
 )
 
 app.add_middleware(

@@ -1,7 +1,7 @@
 import re
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -176,7 +176,7 @@ def create_user(
         user_id=new_user.id,
         token=verify_token,
         type="verify",
-        expires_at=datetime.utcnow() + timedelta(hours=48),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
     ))
     db.commit()
 
@@ -231,7 +231,7 @@ a{{display:inline-block;background:#C5D86D;color:#1f3a27;font-weight:700;font-si
         return _page(False, "Enlace no válido", "El enlace de verificación no existe o ya fue utilizado.")
     if record.used:
         return _page(False, "Ya verificado", "Este enlace ya fue utilizado. Tu cuenta debería estar activa.")
-    if datetime.utcnow() > record.expires_at:
+    if datetime.now(timezone.utc) > record.expires_at:
         return _page(False, "Enlace expirado", "El enlace ha expirado (48 h). Pide al administrador que reenvíe la invitación.")
 
     record.used = True
@@ -270,7 +270,7 @@ def forgot_password(body: ForgotPasswordBody, db: Session = Depends(get_db)):
             user_id=user.id,
             token=reset_token_val,
             type="reset",
-            expires_at=datetime.utcnow() + timedelta(hours=1),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         ))
         db.commit()
 
@@ -304,7 +304,7 @@ def reset_password(body: ResetPasswordBody, db: Session = Depends(get_db)):
 
     if not record or record.used:
         raise HTTPException(400, "El enlace de recuperación no es válido o ya fue utilizado")
-    if datetime.utcnow() > record.expires_at:
+    if datetime.now(timezone.utc) > record.expires_at:
         raise HTTPException(400, "El enlace de recuperación ha expirado")
 
     record.used = True

@@ -10,7 +10,10 @@ RAPIDFUZZ_THRESHOLD = int(os.getenv("RAPIDFUZZ_THRESHOLD", "80"))
 MUESTRAS_DIR  = os.getenv("MUESTRAS_DIR", "../muestras")
 INSTITUTION_CODE = "UDEA"
 
-SECRET_KEY            = os.getenv("SECRET_KEY", "dev-insecure-change-me")
+SECRET_KEY            = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY no está configurada. Genera una con: python -c \"import secrets; print(secrets.token_hex(32))\"")
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 ALGORITHM             = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "8"))
 
