@@ -6,12 +6,14 @@ from models.occurrence import Occurrence
 from models.taxon import Taxon
 from models.event import Event
 from models.location import Location
+from auth.dependencies import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 @router.get("/calidad")
-def calidad(db: Session = Depends(get_db)):
+def calidad(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     total = db.query(func.count(Occurrence.occurrence_id)).scalar() or 0
 
     def pct(n: int) -> float:
@@ -70,7 +72,7 @@ def calidad(db: Session = Depends(get_db)):
 
 
 @router.get("/distribucion-geografica")
-def distribucion(db: Session = Depends(get_db)):
+def distribucion(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rows = (
         db.query(Location.country, func.count(Occurrence.occurrence_id).label("count"))
         .join(Occurrence, Location.location_id == Occurrence.location_id)
@@ -79,3 +81,42 @@ def distribucion(db: Session = Depends(get_db)):
         .all()
     )
     return [{"country": r[0] or "(sin país)", "count": r[1]} for r in rows]
+
+
+@router.get("/mapa")
+def mapa(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    rows = (
+        db.query(
+            Location.decimal_latitude,
+            Location.decimal_longitude,
+            Occurrence.occurrence_id,
+            Occurrence.catalog_number,
+            Occurrence.disposition,
+            Taxon.scientific_name,
+            Taxon.family,
+            Taxon.order,
+            Location.state_province,
+        )
+        .join(Occurrence, Location.location_id == Occurrence.location_id)
+        .join(Taxon, Occurrence.taxon_id == Taxon.taxon_id, isouter=True)
+        .filter(
+            Location.decimal_latitude.isnot(None),
+            Location.decimal_longitude.isnot(None),
+        )
+        .limit(5000)
+        .all()
+    )
+    return [
+        {
+            "lat":            r[0],
+            "lng":            r[1],
+            "occurrenceId":   r[2],
+            "catalogNumber":  r[3],
+            "disposition":    r[4],
+            "scientificName": r[5],
+            "family":         r[6],
+            "taxonOrder":     r[7],
+            "stateProvince":  r[8],
+        }
+        for r in rows
+    ]

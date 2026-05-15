@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from config import DATABASE_URL
 
@@ -16,5 +16,9 @@ def get_db():
         db.close()
 
 def init_db():
-    from models import taxon, event, location, occurrence, identification  # noqa: F401
+    from models import taxon, event, location, occurrence, identification, user, email_token  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    # Adds the email column for installs that pre-date this field
+    with engine.connect() as conn:
+        conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email VARCHAR UNIQUE'))
+        conn.commit()
