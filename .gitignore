@@ -19,3 +19,6 @@ env/
 .DS_Store
 Thumbs.db
 seed_admin.py
+
+# DB dumps (pueden contener datos sensibles)
+*.sql
